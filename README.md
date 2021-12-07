@@ -58,8 +58,12 @@ $ ./scepserver-linux-amd64 -help
     	do not allow renewal until n days before expiry, set to 0 to always allow (default "14")
   -capass string
     	passwd for the ca.key
+  -capassFile string
+    	passwd for the ca.key from file
   -challenge string
     	enforce a challenge password
+  -challengeFile string
+    	enforce a challenge password from file
   -crtvalid string
     	validity for new client certificates in days (default "365")
   -csrverifierexec string
