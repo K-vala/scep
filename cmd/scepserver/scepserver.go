@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"syscall"
+	"io/ioutil"
+	"strings"
 
 	"github.com/micromdm/scep/v2/csrverifier"
 	executablecsrverifier "github.com/micromdm/scep/v2/csrverifier/executable"
@@ -46,9 +48,11 @@ func main() {
 		flPort              = flag.String("port", envString("SCEP_HTTP_LISTEN_PORT", "8080"), "port to listen on")
 		flDepotPath         = flag.String("depot", envString("SCEP_FILE_DEPOT", "depot"), "path to ca folder")
 		flCAPass            = flag.String("capass", envString("SCEP_CA_PASS", ""), "passwd for the ca.key")
+		flCAPassFile	= flag.String("capassFile", envString("SCEP_CA_PASS_FILE", ""), "passwd for the ca.key (from file)")
 		flClDuration        = flag.String("crtvalid", envString("SCEP_CERT_VALID", "365"), "validity for new client certificates in days")
 		flClAllowRenewal    = flag.String("allowrenew", envString("SCEP_CERT_RENEW", "14"), "do not allow renewal until n days before expiry, set to 0 to always allow")
 		flChallengePassword = flag.String("challenge", envString("SCEP_CHALLENGE_PASSWORD", ""), "enforce a challenge password")
+		flChallengePasswordFile = flag.String("challengeFile", envString("SCEP_CHALLENGE_PASSWORD_FILE", ""), "enforce a challenge password (from file)")
 		flCSRVerifierExec   = flag.String("csrverifierexec", envString("SCEP_CSR_VERIFIER_EXEC", ""), "will be passed the CSRs for verification")
 		flDebug             = flag.Bool("debug", envBool("SCEP_LOG_DEBUG"), "enable debug logging")
 		flLogJSON           = flag.Bool("log-json", envBool("SCEP_LOG_JSON"), "output JSON logs")
@@ -116,7 +120,21 @@ func main() {
 
 	var svc scepserver.Service // scep service
 	{
-		crts, key, err := depot.CA([]byte(*flCAPass))
+		var CAPass string
+		if (*flCAPass != "") && (*flCAPassFile != "") {
+			lginfo.Log("err", "can not use capass and capassFile at the same time")
+			os.Exit(1)
+		} else if *flCAPassFile != "" {
+			CAPassFileContent, err := ioutil.ReadFile(string(*flCAPassFile))
+			if err != nil {
+				lginfo.Log("err", err)
+			}
+			CAPass = strings.ReplaceAll(string(CAPassFileContent), "\n", "")
+		} else {
+			CAPass = *flCAPass
+		}
+
+		crts, key, err := depot.CA([]byte(CAPass))
 		if err != nil {
 			lginfo.Log("err", err)
 			os.Exit(1)
@@ -129,10 +147,20 @@ func main() {
 			depot,
 			scepdepot.WithAllowRenewalDays(allowRenewal),
 			scepdepot.WithValidityDays(clientValidity),
-			scepdepot.WithCAPass(*flCAPass),
+			scepdepot.WithCAPass(CAPass),
 		)
-		if *flChallengePassword != "" {
+		if (*flChallengePassword != "") && (*flChallengePasswordFile != "") {
+			lginfo.Log("err", "can not use challenge and challengeFile at the same time")
+			os.Exit(1)
+		} else if *flChallengePassword != "" {
 			signer = scepserver.ChallengeMiddleware(*flChallengePassword, signer)
+		} else if *flChallengePasswordFile != "" {
+			content, err := ioutil.ReadFile(string(*flChallengePasswordFile))
+			if err != nil {
+				lginfo.Log("err", err)
+			}
+			var pass = strings.ReplaceAll(string(content), "\n", "")
+			signer = scepserver.ChallengeMiddleware(pass, signer)
 		}
 		if csrVerifier != nil {
 			signer = csrverifier.Middleware(csrVerifier, signer)
