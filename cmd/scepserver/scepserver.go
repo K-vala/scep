@@ -71,7 +71,7 @@ func main() {
 		fmt.Println(version)
 		os.Exit(0)
 	}
-	port := ":" + *flPort
+	port := "127.0.0.1:" + *flPort
 
 	var logger log.Logger
 	{
